@@ -29,48 +29,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests Pillow python-dotenv
       
-      - name: Fetch latest stories from WordPress
-        id: fetch_stories
+      - name: Create test stories
         run: |
           python << 'EOF'
-          import requests
           import json
-          import xml.etree.ElementTree as ET
-          import html
-          import re
           
-          # Fetch RSS feed
-          response = requests.get('https://dentaldailybrief.com/feed/')
+          # Hardcoded test stories - replace with WordPress fetch later
+          stories = [
+              {
+                  "headline": "Economic Confidence Hits New Low Among U.S. Dentists in Q2 2025",
+                  "summary": "The Q2 2025 report reveals declining confidence among dentists for the second consecutive quarter. Key concerns include tariffs and inflation."
+              },
+              {
+                  "headline": "New AI Technology Transforms Dental Diagnostics",
+                  "summary": "Revolutionary AI system shows 95% accuracy in detecting early-stage cavities, potentially changing preventive care standards."
+              },
+              {
+                  "headline": "Study Links Oral Health to Cardiovascular Disease Prevention",
+                  "summary": "Major research demonstrates strong correlation between regular dental care and reduced heart disease risk in adults over 40."
+              }
+          ]
           
-          # Parse XML
-          root = ET.fromstring(response.content)
-          
-          stories = []
-          # Get first 3 items from RSS
-          for item in root.findall('.//item')[:3]:
-              title = item.find('title').text
-              description = item.find('description').text
-              
-              # Clean HTML from description
-              description = html.unescape(description)
-              # Remove HTML tags
-              description = re.sub('<[^<]+?>', '', description)
-              
-              # Get first 200 chars as summary
-              summary = description[:200].strip()
-              if len(summary) >= 200:
-                  summary += '...'
-              
-              stories.append({
-                  'headline': title,
-                  'summary': summary
-              })
-          
-          # Save to file
           with open('stories.json', 'w') as f:
               json.dump(stories, f)
           
-          print(f"Fetched {len(stories)} stories from RSS")
+          print(f"Created {len(stories)} test stories")
           EOF
       
       - name: Generate carousel images
@@ -79,15 +62,12 @@ jobs:
           import json
           from instagram_carousel_generator import InstagramCarouselGenerator
           
-          # Load stories
           with open('stories.json', 'r') as f:
               stories = json.load(f)
           
-          # Generate images
           generator = InstagramCarouselGenerator()
           image_paths = generator.generate_carousel(stories)
           
-          # Save paths for next step
           with open('image_paths.json', 'w') as f:
               json.dump(image_paths, f)
           
@@ -103,11 +83,9 @@ jobs:
           import json
           from instagram_poster import automate_daily_post
           
-          # Load stories
           with open('stories.json', 'r') as f:
               stories = json.load(f)
           
-          # Run automation
           post_id = automate_daily_post(stories)
           
           if post_id:
