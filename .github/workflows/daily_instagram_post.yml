@@ -1,0 +1,142 @@
+# .github/workflows/daily_instagram_post.yml
+# Automates daily Instagram carousel posts
+
+name: Daily Instagram Post
+
+on:
+  schedule:
+    # Run daily at 9 AM EST (14:00 UTC)
+    - cron: '0 14 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  post_to_instagram:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests Pillow python-dotenv
+      
+      - name: Fetch latest stories from WordPress
+        id: fetch_stories
+        run: |
+          python << 'EOF'
+          import requests
+          import json
+          import os
+          from datetime import datetime
+          
+          # Fetch from your WordPress API
+          response = requests.get('https://dentaldailybrief.com/wp-json/wp/v2/posts?per_page=5&orderby=date')
+          posts = response.json()
+          
+          stories = []
+          for post in posts[:3]:  # Top 3 stories
+              # Extract plain text from content
+              from html.parser import HTMLParser
+              
+              class HTMLTextExtractor(HTMLParser):
+                  def __init__(self):
+                      super().__init__()
+                      self.text = []
+                  
+                  def handle_data(self, data):
+                      self.text.append(data)
+                  
+                  def get_text(self):
+                      return ' '.join(self.text)
+              
+              parser = HTMLTextExtractor()
+              parser.feed(post['content']['rendered'])
+              content = parser.get_text()
+              
+              # Get first 200 chars as summary
+              summary = content[:200].strip() + '...'
+              
+              stories.append({
+                  'headline': post['title']['rendered'],
+                  'summary': summary
+              })
+          
+          # Save to file for next step
+          with open('stories.json', 'w') as f:
+              json.dump(stories, f)
+          
+          print(f"Fetched {len(stories)} stories")
+          EOF
+      
+      - name: Generate carousel images
+        run: |
+          python << 'EOF'
+          import json
+          from instagram_carousel_generator import InstagramCarouselGenerator
+          
+          # Load stories
+          with open('stories.json', 'r') as f:
+              stories = json.load(f)
+          
+          # Generate images
+          generator = InstagramCarouselGenerator()
+          image_paths = generator.generate_carousel(stories)
+          
+          # Save paths for next step
+          with open('image_paths.json', 'w') as f:
+              json.dump(image_paths, f)
+          
+          print(f"Generated {len(image_paths)} carousel images")
+          EOF
+      
+      - name: Post to Instagram
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+        run: |
+          python << 'EOF'
+          import json
+          from instagram_poster import automate_daily_post
+          
+          # Load stories
+          with open('stories.json', 'r') as f:
+              stories = json.load(f)
+          
+          # Run automation
+          post_id = automate_daily_post(stories)
+          
+          if post_id:
+              print("✅ Successfully posted to Instagram!")
+          else:
+              print("❌ Failed to post to Instagram")
+              exit(1)
+          EOF
+      
+      - name: Upload images as artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: instagram-carousel-${{ github.run_number }}
+          path: instagram_posts/
+          retention-days: 7
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Instagram posting failed! Check the logs."
+          # You can add Slack/Discord webhook notification here
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Instagram post successful!"
+          # Optional: Send success notification
