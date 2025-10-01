@@ -123,7 +123,7 @@ jobs:
       
       - name: Upload images as artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: instagram-carousel-${{ github.run_number }}
           path: instagram_posts/
@@ -133,10 +133,8 @@ jobs:
         if: failure()
         run: |
           echo "Instagram posting failed! Check the logs."
-          # You can add Slack/Discord webhook notification here
 
       - name: Notify on success
         if: success()
         run: |
           echo "✅ Instagram post successful!"
-          # Optional: Send success notification
