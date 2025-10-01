@@ -35,46 +35,42 @@ jobs:
           python << 'EOF'
           import requests
           import json
-          import os
-          from datetime import datetime
+          import xml.etree.ElementTree as ET
+          import html
+          import re
           
-          # Fetch from your WordPress API
-          response = requests.get('https://dentaldailybrief.com/wp-json/wp/v2/posts?per_page=5&orderby=date')
-          posts = response.json()
+          # Fetch RSS feed
+          response = requests.get('https://dentaldailybrief.com/feed/')
+          
+          # Parse XML
+          root = ET.fromstring(response.content)
           
           stories = []
-          for post in posts[:3]:  # Top 3 stories
-              # Extract plain text from content
-              from html.parser import HTMLParser
+          # Get first 3 items from RSS
+          for item in root.findall('.//item')[:3]:
+              title = item.find('title').text
+              description = item.find('description').text
               
-              class HTMLTextExtractor(HTMLParser):
-                  def __init__(self):
-                      super().__init__()
-                      self.text = []
-                  
-                  def handle_data(self, data):
-                      self.text.append(data)
-                  
-                  def get_text(self):
-                      return ' '.join(self.text)
-              
-              parser = HTMLTextExtractor()
-              parser.feed(post['content']['rendered'])
-              content = parser.get_text()
+              # Clean HTML from description
+              description = html.unescape(description)
+              # Remove HTML tags
+              description = re.sub('<[^<]+?>', '', description)
               
               # Get first 200 chars as summary
-              summary = content[:200].strip() + '...'
+              summary = description[:200].strip()
+              if len(summary) >= 200:
+                  summary += '...'
               
               stories.append({
-                  'headline': post['title']['rendered'],
+                  'headline': title,
                   'summary': summary
               })
           
-          # Save to file for next step
+          # Save to file
           with open('stories.json', 'w') as f:
               json.dump(stories, f)
           
-          print(f"Fetched {len(stories)} stories")
+          print(f"Fetched {len(stories)} stories from RSS")
           EOF
       
       - name: Generate carousel images
