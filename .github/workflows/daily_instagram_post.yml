@@ -1,55 +1,44 @@
-# .github/workflows/daily_instagram_post.yml
-# Automates daily Instagram posts from Dental Daily Brief
-
 name: Daily Instagram Post
 
 on:
   schedule:
-    # Run daily at 9 AM EST (14:00 UTC)
-    - cron: '0 14 * * *'
-  
-  # Allow manual trigger
-  workflow_dispatch:
+    - cron: '0 14 * * *'  # 9 AM EST (14:00 UTC)
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   post_to_instagram:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests Pillow cloudinary
-      
-      - name: Run automation
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-        run: python main.py
-      
-      - name: Commit updated tracking file
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add posted_stories.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted stories tracking [skip ci]"
-          git push
-      
-      - name: Upload images as artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: instagram-images-${{ github.run_number }}
-          path: instagram_images/
-          retention-days: 7
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run automation
+      env:
+        INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+        INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+        CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+        CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+        CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      run: |
+        python main.py
+    
+    - name: Commit updated tracking file
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add posted_stories.json
+        git diff --staged --quiet || git commit -m "Update posted stories tracking"
+        git push || echo "No changes to push"
+    
+    # Removed the artifact upload step that was causing the warning
