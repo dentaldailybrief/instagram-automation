@@ -29,14 +29,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests Pillow cloudinary
       
-      - name: Create main automation script
+      - name: Run automation
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
         run: |
-          cat > automation.py << 'SCRIPT_END'
+          python << 'EOF'
           import sys
+          import os
           import json
           import time
           import requests
           from datetime import datetime
+          
+          # Add current directory to path
+          sys.path.insert(0, os.getcwd())
+          
           from instagram_image_generator import InstagramImageGenerator
           from instagram_poster_cloudinary import post_story_to_instagram
 
@@ -100,11 +111,11 @@ jobs:
                   if post_id:
                       posted_urls_list.append(story['url'])
                       successful_posts += 1
-                      print(f"✅ Successfully posted! ({successful_posts}/{len(new_stories)})")
+                      print(f"Successfully posted! ({successful_posts}/{len(new_stories)})")
                   else:
-                      print(f"❌ Failed to post")
+                      print(f"Failed to post")
               except Exception as e:
-                  print(f"❌ Error: {str(e)}")
+                  print(f"Error: {str(e)}")
               
               # Wait between posts (Instagram rate limiting)
               if idx < len(new_stories):
@@ -119,19 +130,10 @@ jobs:
               json.dump(posted_data, f, indent=2)
 
           print("\n" + "=" * 60)
-          print("✅ AUTOMATION COMPLETE!")
+          print("AUTOMATION COMPLETE!")
           print("=" * 60)
           print(f"Successfully posted: {successful_posts}/{len(new_stories)}")
-          SCRIPT_END
-      
-      - name: Run automation
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-        run: python automation.py
+          EOF
       
       - name: Commit updated tracking file
         run: |
