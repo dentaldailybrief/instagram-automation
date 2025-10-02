@@ -85,31 +85,6 @@ def create_gradient_background(width, height):
     
     return image
 
-def draw_rounded_rectangle(draw, coords, radius=20, fill=None, outline=None, width=1):
-    """Draw a rounded rectangle (compatible with older Pillow versions)."""
-    x1, y1, x2, y2 = coords
-    
-    # Draw the main rectangle body (minus corners)
-    draw.rectangle([(x1 + radius, y1), (x2 - radius, y2)], fill=fill)
-    draw.rectangle([(x1, y1 + radius), (x2, y2 - radius)], fill=fill)
-    
-    # Draw corners
-    draw.ellipse([(x1, y1), (x1 + radius * 2, y1 + radius * 2)], fill=fill)
-    draw.ellipse([(x2 - radius * 2, y1), (x2, y1 + radius * 2)], fill=fill)
-    draw.ellipse([(x1, y2 - radius * 2), (x1 + radius * 2, y2)], fill=fill)
-    draw.ellipse([(x2 - radius * 2, y2 - radius * 2), (x2, y2)], fill=fill)
-    
-    if outline:
-        # Draw outline if specified
-        draw.arc([(x1, y1), (x1 + radius * 2, y1 + radius * 2)], 180, 270, fill=outline, width=width)
-        draw.arc([(x2 - radius * 2, y1), (x2, y1 + radius * 2)], 270, 0, fill=outline, width=width)
-        draw.arc([(x1, y2 - radius * 2), (x1 + radius * 2, y2)], 90, 180, fill=outline, width=width)
-        draw.arc([(x2 - radius * 2, y2 - radius * 2), (x2, y2)], 0, 90, fill=outline, width=width)
-        draw.line([(x1 + radius, y1), (x2 - radius, y1)], fill=outline, width=width)
-        draw.line([(x2, y1 + radius), (x2, y2 - radius)], fill=outline, width=width)
-        draw.line([(x2 - radius, y2), (x1 + radius, y2)], fill=outline, width=width)
-        draw.line([(x1, y2 - radius), (x1, y1 + radius)], fill=outline, width=width)
-
 def add_design_elements(draw, width, height):
     """Add subtle design elements to make the image more professional."""
     # Add subtle corner accents
@@ -172,25 +147,31 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
         badge_bg = yellow
         badge_text = (40, 40, 40)
         
-        # Draw badge background (rounded rectangle effect)
+        # Draw badge background (simple rectangle for compatibility)
         badge_width = 100
         badge_height = 40
         badge_x = width - margin - badge_width
         badge_y = 60
         
-        # Create rounded rectangle for badge
+        # Create rounded rectangle effect with circles and rectangles
         draw.ellipse([(badge_x, badge_y), (badge_x + 20, badge_y + badge_height)], fill=badge_bg)
         draw.ellipse([(badge_x + badge_width - 20, badge_y), (badge_x + badge_width, badge_y + badge_height)], fill=badge_bg)
         draw.rectangle([(badge_x + 10, badge_y), (badge_x + badge_width - 10, badge_y + badge_height)], fill=badge_bg)
         
-        # Draw "NEW" text
-        draw.text((badge_x + badge_width//2, badge_y + badge_height//2 + 5), "NEW", 
-                 font=fonts['source'], fill=badge_text, anchor="mm")
+        # Draw "NEW" text - remove anchor for compatibility
+        text_x = badge_x + badge_width // 2 - 20
+        text_y = badge_y + badge_height // 2 - 10
+        draw.text((text_x, text_y), "NEW", font=fonts['source'], fill=badge_text)
     
     # Brand name at top
     brand_text = "DENTAL DAILY BRIEF"
-    bbox = draw.textbbox((0, 0), brand_text, font=fonts['brand'])
-    text_width = bbox[2] - bbox[0]
+    try:
+        bbox = draw.textbbox((0, 0), brand_text, font=fonts['brand'])
+        text_width = bbox[2] - bbox[0]
+    except AttributeError:
+        # Fallback for older Pillow versions
+        text_width = len(brand_text) * 20  # Approximate width
+    
     draw_text_with_shadow(draw, ((width - text_width)//2, y_position), 
                          brand_text, fonts['brand'], white, offset=3)
     
@@ -207,20 +188,23 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
     
     # Draw title lines
     for line in title_lines[:3]:  # Limit to 3 lines
-        bbox = draw.textbbox((0, 0), line, font=fonts['title'])
-        text_width = bbox[2] - bbox[0]
+        try:
+            bbox = draw.textbbox((0, 0), line, font=fonts['title'])
+            text_width = bbox[2] - bbox[0]
+        except AttributeError:
+            text_width = len(line) * 15
+        
         draw_text_with_shadow(draw, ((width - text_width)//2, y_position), 
                              line, fonts['title'], white, offset=3)
         y_position += 55
     
     if len(title_lines) > 3:
-        draw.text((width//2, y_position), "...", font=fonts['title'], 
-                 fill=white, anchor="mm")
+        draw.text((width//2 - 10, y_position), "...", font=fonts['title'], fill=white)
         y_position += 55
     
     y_position += 20
     
-    # Summary box with background
+    # Summary box with background - simplified for compatibility
     summary_bg_color = (255, 255, 255, 25)  # Semi-transparent white
     summary_padding = 30
     
@@ -228,29 +212,31 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
     summary_y_start = y_position - 10
     summary = story.get('summary', '')
     summary_lines = textwrap.wrap(summary, width=38, break_long_words=False)
-    summary_height = len(summary_lines[:6]) * 40 + (summary_padding * 2)
+    summary_height = min(len(summary_lines), 6) * 40 + (summary_padding * 2)
     
-    # Draw summary background using our custom function
-    draw_rounded_rectangle(draw, 
-        (margin - 20, summary_y_start, 
-         width - margin + 20, summary_y_start + summary_height),
-        radius=20,
+    # Draw simple rectangle for summary background (no rounded corners for compatibility)
+    draw.rectangle(
+        [(margin - 20, summary_y_start), 
+         (width - margin + 20, summary_y_start + summary_height)],
         fill=summary_bg_color
     )
     
     y_position += summary_padding
     
     # Draw summary text
-    for line in summary_lines[:6]:  # Limit to 6 lines
-        bbox = draw.textbbox((0, 0), line, font=fonts['summary'])
-        text_width = bbox[2] - bbox[0]
+    for i, line in enumerate(summary_lines[:6]):  # Limit to 6 lines
+        try:
+            bbox = draw.textbbox((0, 0), line, font=fonts['summary'])
+            text_width = bbox[2] - bbox[0]
+        except AttributeError:
+            text_width = len(line) * 12
+            
         draw.text(((width - text_width)//2, y_position), line, 
                  font=fonts['summary'], fill=light_gray)
         y_position += 40
     
     if len(summary_lines) > 6:
-        draw.text((width//2, y_position), "...", font=fonts['summary'], 
-                 fill=light_gray, anchor="mm")
+        draw.text((width//2 - 10, y_position), "...", font=fonts['summary'], fill=light_gray)
         y_position += 40
     
     y_position += 30
@@ -262,8 +248,12 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
     # Position source near bottom
     y_position = height - 180
     
-    bbox = draw.textbbox((0, 0), source_text, font=fonts['source'])
-    text_width = bbox[2] - bbox[0]
+    try:
+        bbox = draw.textbbox((0, 0), source_text, font=fonts['source'])
+        text_width = bbox[2] - bbox[0]
+    except AttributeError:
+        text_width = len(source_text) * 10
+        
     draw.text(((width - text_width)//2, y_position), source_text, 
              font=fonts['source'], fill=light_gray)
     
@@ -271,18 +261,24 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
     cta_text = "Visit DentalDailyBrief.com for more"
     y_position = height - 100
     
-    # Draw CTA with background
+    # Draw CTA with simple background (no rounded corners for compatibility)
     cta_bg = (255, 255, 255, 40)
     cta_padding = 20
-    bbox = draw.textbbox((0, 0), cta_text, font=fonts['cta'])
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
+    
+    try:
+        bbox = draw.textbbox((0, 0), cta_text, font=fonts['cta'])
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+    except AttributeError:
+        text_width = len(cta_text) * 12
+        text_height = 30
     
     cta_x = (width - text_width) // 2
-    draw_rounded_rectangle(draw,
-        (cta_x - cta_padding, y_position - 10, 
-         cta_x + text_width + cta_padding, y_position + text_height + 10),
-        radius=25,
+    
+    # Simple rectangle for CTA background
+    draw.rectangle(
+        [(cta_x - cta_padding, y_position - 10), 
+         (cta_x + text_width + cta_padding, y_position + text_height + 10)],
         fill=cta_bg
     )
     
