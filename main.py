@@ -10,14 +10,27 @@ def load_posted_stories():
     """Load the list of already posted story URLs."""
     try:
         with open('posted_stories.json', 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Handle both formats: list of URLs or list of story objects
+            posted_urls = []
+            for item in data:
+                if isinstance(item, str):
+                    # It's already a URL string
+                    posted_urls.append(item)
+                elif isinstance(item, dict) and 'url' in item:
+                    # It's a story object with a url field
+                    posted_urls.append(item['url'])
+            return posted_urls
     except FileNotFoundError:
         return []
+    except Exception as e:
+        print(f"Warning: Error reading posted_stories.json: {e}")
+        return []
 
-def save_posted_stories(posted_stories):
-    """Save the updated list of posted story URLs."""
+def save_posted_stories(posted_urls):
+    """Save the updated list of posted story URLs (as strings only)."""
     with open('posted_stories.json', 'w') as f:
-        json.dump(posted_stories, f, indent=2)
+        json.dump(posted_urls, f, indent=2)
 
 def fetch_stories():
     """Fetch stories from the DentalDailyBrief API."""
@@ -29,9 +42,27 @@ def fetch_stories():
     try:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        return response.json()
+        stories = response.json()
+        
+        # Ensure we have a list of story objects
+        if not isinstance(stories, list):
+            print(f"Warning: API returned non-list data: {type(stories)}")
+            return []
+            
+        # Validate each story has required fields
+        valid_stories = []
+        for story in stories:
+            if isinstance(story, dict) and 'url' in story:
+                valid_stories.append(story)
+            else:
+                print(f"Warning: Invalid story format: {story}")
+        
+        return valid_stories
     except requests.exceptions.RequestException as e:
         print(f"Error fetching stories: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON from API: {e}")
         return []
 
 def main():
@@ -61,23 +92,28 @@ def main():
     print("\nFetching stories from API...")
     stories = fetch_stories()
     if not stories:
-        print("No stories fetched from API")
+        print("No valid stories fetched from API")
         return
     
-    print(f"✓ Fetched {len(stories)} stories from API")
+    print(f"✓ Fetched {len(stories)} valid stories from API")
     
-    # Load already posted stories
-    posted_stories = load_posted_stories()
-    print(f"✓ Already posted {len(posted_stories)} stories in the past")
+    # Load already posted story URLs
+    posted_urls = load_posted_stories()
+    print(f"✓ Loaded {len(posted_urls)} previously posted story URLs")
+    
+    # Debug: Show what we have
+    if posted_urls:
+        print(f"   Last posted URL: {posted_urls[-1][:50]}...")
     
     # Filter out already posted stories
-    new_stories = [
-        story for story in stories 
-        if story.get('url') and story['url'] not in posted_stories
-    ]
+    new_stories = []
+    for story in stories:
+        if story.get('url') and story['url'] not in posted_urls:
+            new_stories.append(story)
     
     if not new_stories:
         print("\nNo new stories to post")
+        print("All current stories have already been posted.")
         return
     
     print(f"✓ Found {len(new_stories)} new stories to post")
@@ -93,11 +129,13 @@ def main():
         print(f"   Title: {story.get('title', 'Untitled')[:60]}...")
         print(f"   URL: {story.get('url', 'No URL')}")
         print(f"   Age: {story.get('age', 'unknown')}")
+        print(f"   Source: {story.get('source', 'Unknown')}")
         
         try:
             # Generate image for the story
             print("\n   🎨 Generating image...")
-            image_path = generate_instagram_image(story, f"instagram_post_{i}.png")
+            image_path = f"instagram_post_{i}.png"
+            generate_instagram_image(story, image_path)
             
             # Check if image was created
             if not os.path.exists(image_path):
@@ -108,19 +146,34 @@ def main():
             file_size = os.path.getsize(image_path) / 1024  # Size in KB
             print(f"   ✓ Image created: {image_path} ({file_size:.1f} KB)")
             
+            # Prepare caption
+            title = story.get('title', '')
+            summary = story.get('summary', '')
+            source = story.get('source', 'DentalDailyBrief.com')
+            
+            # Truncate if too long
+            if len(title) > 200:
+                title = title[:197] + "..."
+            if len(summary) > 500:
+                summary = summary[:497] + "..."
+            
+            caption = f"{title}\n\n{summary}\n\nSource: {source}\n\n#DentalNews #Dentistry #DentalDaily #Healthcare #DentalProfessionals #DentalEducation #OralHealth"
+            
             # Post to Instagram
             print("\n   📤 Posting to Instagram...")
+            print(f"   Caption length: {len(caption)} characters")
+            
             success = post_to_instagram(
                 image_path=image_path,
-                caption=f"{story.get('title', '')}\n\n{story.get('summary', '')}\n\nSource: {story.get('source', 'DentalDailyBrief.com')}\n\n#DentalNews #Dentistry #DentalDaily #Healthcare #DentalProfessionals"
+                caption=caption
             )
             
             if success:
                 print(f"   ✅ SUCCESS: Posted to Instagram!")
                 successful_posts += 1
-                # Add to posted stories
-                posted_stories.append(story['url'])
-                save_posted_stories(posted_stories)
+                # Add URL to posted stories (not the whole object)
+                posted_urls.append(story['url'])
+                save_posted_stories(posted_urls)
                 print(f"   ✓ Updated tracking file")
             else:
                 print(f"   ❌ FAILED: Could not post to Instagram")
@@ -141,6 +194,13 @@ def main():
             print(f"   Full error trace:")
             traceback.print_exc()
             failed_posts += 1
+            
+            # Clean up on error
+            try:
+                if 'image_path' in locals() and os.path.exists(image_path):
+                    os.remove(image_path)
+            except:
+                pass
             continue
     
     # Final summary
@@ -152,9 +212,11 @@ def main():
     print("=" * 50)
     
     # Exit with error code if any posts failed
-    if failed_posts > 0:
-        print(f"\n⚠️  Some posts failed. Check the logs above for details.")
+    if failed_posts > 0 and successful_posts == 0:
+        print(f"\n⚠️  All posts failed. Check the logs above for details.")
         exit(1)
+    elif failed_posts > 0:
+        print(f"\n⚠️  Some posts failed, but {successful_posts} succeeded.")
     else:
         print(f"\n✨ All posts completed successfully!")
 
