@@ -87,4 +87,65 @@ class InstagramPoster:
             return None
         
         # Generate caption
-        caption = self.generate_caption(st
+        caption = self.generate_caption(story)
+        
+        # Create container
+        time.sleep(2)  # Rate limiting
+        container_id = self.create_media_container(image_url, caption)
+        if not container_id:
+            return None
+        
+        # Publish
+        time.sleep(3)  # Wait for processing
+        post_id = self.publish_post(container_id)
+        
+        return post_id
+    
+    def generate_caption(self, story):
+        """Generate Instagram caption for a story"""
+        caption = f"""📰 {story['title']}
+
+{story['summary'][:150]}...
+
+🔗 Read more at DentalDailyBrief.com
+
+Source: {story['source']}
+
+#DentalNews #Dentistry #DentalProfessional #DentalIndustry #Dentist #OralHealth #DentalCare #HealthcareNews
+"""
+        return caption
+
+
+def post_story_to_instagram(story, image_path):
+    """Post a single story to Instagram"""
+    
+    # Load credentials from environment
+    access_token = os.environ.get('INSTAGRAM_ACCESS_TOKEN')
+    account_id = os.environ.get('INSTAGRAM_ACCOUNT_ID')
+    
+    cloudinary_config = {
+        'cloud_name': os.environ.get('CLOUDINARY_CLOUD_NAME'),
+        'api_key': os.environ.get('CLOUDINARY_API_KEY'),
+        'api_secret': os.environ.get('CLOUDINARY_API_SECRET')
+    }
+    
+    if not all([access_token, account_id, cloudinary_config['cloud_name']]):
+        print("⚠️ Missing credentials!")
+        return None
+    
+    poster = InstagramPoster(access_token, account_id, cloudinary_config)
+    post_id = poster.post_single_image(image_path, story)
+    
+    return post_id
+
+
+# Example usage
+if __name__ == "__main__":
+    sample_story = {
+        "title": "Economic Confidence Hits New Low Among U.S. Dentists",
+        "summary": "The Q2 2025 report reveals declining confidence among dentists.",
+        "source": "ADA News",
+        "url": "https://example.com/story"
+    }
+    
+    post_id = post_story_to_instagram(sample_story, "test_image.png")
