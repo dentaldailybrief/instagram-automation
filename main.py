@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""
+Main automation script for Instagram posting
+"""
+import sys
+import os
+import json
+import time
+import requests
+from datetime import datetime
+from instagram_image_generator import InstagramImageGenerator
+from instagram_poster_cloudinary import post_story_to_instagram
+
+def main():
+    print("=" * 60)
+    print("STEP 1: FETCHING STORIES FROM API")
+    print("=" * 60)
+
+    # Fetch from your Dental Daily Brief API
+    response = requests.get('https://dentaldailybrief.com/api/stories')
+    data = response.json()
+
+    # Load already posted stories
+    try:
+        with open('posted_stories.json', 'r') as f:
+            posted_data = json.load(f)
+            posted_urls = set(posted_data.get('posted_urls', []))
+    except:
+        posted_urls = set()
+
+    # Filter out already posted stories
+    new_stories = []
+    for story in data['stories']:
+        if story['url'] not in posted_urls:
+            new_stories.append(story)
+
+    print(f"Total stories from API: {len(data['stories'])}")
+    print(f"Already posted: {len(posted_urls)}")
+    print(f"New stories to post: {len(new_stories)}")
+
+    if not new_stories:
+        print("\nNo new stories to post today!")
+        return 0
+
+    print("\n" + "=" * 60)
+    print("STEP 2: GENERATING IMAGES AND POSTING")
+    print("=" * 60)
+
+    # Load posted stories tracking
+    try:
+        with open('posted_stories.json', 'r') as f:
+            posted_data = json.load(f)
+    except:
+        posted_data = {'posted_urls': [], 'last_updated': ''}
+
+    posted_urls_list = posted_data.get('posted_urls', [])
+
+    # Generate images and post each story
+    generator = InstagramImageGenerator()
+    successful_posts = 0
+
+    for idx, story in enumerate(new_stories, 1):
+        print(f"\n[{idx}/{len(new_stories)}] Processing: {story['title'][:50]}...")
+        
+        try:
+            # Generate image
+            image_path = generator.generate_image(story)
+            
+            # Post to Instagram
+            post_id = post_story_to_instagram(story, image_path)
+            
+            if post_id:
+                posted_urls_list.append(story['url'])
+                successful_posts += 1
+                print(f"Successfully posted! ({successful_posts}/{len(new_stories)})")
+            else:
+                print(f"Failed to post")
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        # Wait between posts (Instagram rate limiting)
+        if idx < len(new_stories):
+            print("Waiting 30 seconds before next post...")
+            time.sleep(30)
+
+    # Update tracking file
+    posted_data['posted_urls'] = posted_urls_list
+    posted_data['last_updated'] = datetime.now().isoformat()
+
+    with open('posted_stories.json', 'w') as f:
+        json.dump(posted_data, f, indent=2)
+
+    print("\n" + "=" * 60)
+    print("AUTOMATION COMPLETE!")
+    print("=" * 60)
+    print(f"Successfully posted: {successful_posts}/{len(new_stories)}")
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
