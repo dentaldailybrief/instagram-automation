@@ -1,151 +1,126 @@
-"""
-Instagram Auto-Poster with Cloudinary for Dental Daily Brief
-Posts single images to Instagram using Cloudinary for hosting
-"""
-
+import os
 import requests
-import json
-from datetime import datetime
-import time
 import cloudinary
 import cloudinary.uploader
-import os
 
-class InstagramPoster:
-    def __init__(self, access_token, instagram_account_id, cloudinary_config):
-        self.access_token = access_token
-        self.instagram_account_id = instagram_account_id
-        self.base_url = "https://graph.facebook.com/v18.0"
-        
-        # Configure Cloudinary
-        cloudinary.config(
-            cloud_name=cloudinary_config['cloud_name'],
-            api_key=cloudinary_config['api_key'],
-            api_secret=cloudinary_config['api_secret']
+def upload_to_cloudinary(image_path):
+    """Upload image to Cloudinary and return the URL."""
+    
+    # Configure Cloudinary
+    cloudinary.config(
+        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+        api_key=os.environ.get('CLOUDINARY_API_KEY'),
+        api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+    )
+    
+    try:
+        # Upload image to Cloudinary
+        response = cloudinary.uploader.upload(
+            image_path,
+            folder="instagram_posts",
+            resource_type="image"
         )
         
-    def upload_to_cloudinary(self, image_path):
-        """Upload image to Cloudinary and get public URL"""
-        try:
-            upload_result = cloudinary.uploader.upload(
-                image_path,
-                folder="dental_daily_brief"
-            )
-            image_url = upload_result['secure_url']
-            print(f"✓ Uploaded to Cloudinary: {image_url}")
-            return image_url
-        except Exception as e:
-            print(f"✗ Cloudinary upload failed: {str(e)}")
-            return None
+        # Return the secure URL
+        return response['secure_url']
     
-    def create_media_container(self, image_url, caption):
-        """Create Instagram media container"""
-        url = f"{self.base_url}/{self.instagram_account_id}/media"
-        
-        params = {
-            'access_token': self.access_token,
-            'image_url': image_url,
-            'caption': caption
-        }
-        
+    except Exception as e:
+        print(f"Error uploading to Cloudinary: {e}")
+        return None
+
+def create_instagram_media(image_url, caption, access_token, account_id):
+    """Create a media object on Instagram."""
+    
+    url = f"https://graph.facebook.com/v18.0/{account_id}/media"
+    
+    params = {
+        'image_url': image_url,
+        'caption': caption,
+        'access_token': access_token
+    }
+    
+    try:
         response = requests.post(url, data=params)
-        
-        if response.status_code == 200:
-            container_id = response.json()['id']
-            print(f"✓ Created media container")
-            return container_id
-        else:
-            print(f"✗ Container creation failed: {response.text}")
-            return None
+        response.raise_for_status()
+        return response.json().get('id')
     
-    def publish_post(self, container_id):
-        """Publish the Instagram post"""
-        url = f"{self.base_url}/{self.instagram_account_id}/media_publish"
-        
-        params = {
-            'access_token': self.access_token,
-            'creation_id': container_id
-        }
-        
-        response = requests.post(url, params=params)
-        
-        if response.status_code == 200:
-            post_id = response.json()['id']
-            print(f"✅ Post published successfully! ID: {post_id}")
-            return post_id
-        else:
-            print(f"✗ Publishing failed: {response.text}")
-            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error creating Instagram media: {e}")
+        if response.text:
+            print(f"Response: {response.text}")
+        return None
+
+def publish_instagram_media(media_id, access_token, account_id):
+    """Publish a media object on Instagram."""
     
-    def post_single_image(self, image_path, story):
-        """Complete workflow to post single image"""
-        print(f"\n🚀 Posting story: {story['title'][:50]}...")
-        
-        # Upload to Cloudinary
-        image_url = self.upload_to_cloudinary(image_path)
-        if not image_url:
-            return None
-        
-        # Generate caption
-        caption = self.generate_caption(story)
-        
-        # Create container
-        time.sleep(2)  # Rate limiting
-        container_id = self.create_media_container(image_url, caption)
-        if not container_id:
-            return None
-        
-        # Publish
-        time.sleep(3)  # Wait for processing
-        post_id = self.publish_post(container_id)
-        
-        return post_id
+    url = f"https://graph.facebook.com/v18.0/{account_id}/media_publish"
     
-    def generate_caption(self, story):
-        """Generate Instagram caption for a story"""
-        caption = f"""📰 {story['title']}
-
-{story['summary'][:150]}...
-
-🔗 Read more at DentalDailyBrief.com
-
-Source: {story['source']}
-
-#DentalNews #Dentistry #DentalProfessional #DentalIndustry #Dentist #OralHealth #DentalCare #HealthcareNews
-"""
-        return caption
-
-
-def post_story_to_instagram(story, image_path):
-    """Post a single story to Instagram"""
+    params = {
+        'creation_id': media_id,
+        'access_token': access_token
+    }
     
-    # Load credentials from environment
+    try:
+        response = requests.post(url, data=params)
+        response.raise_for_status()
+        return response.json().get('id')
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error publishing Instagram media: {e}")
+        if response.text:
+            print(f"Response: {response.text}")
+        return None
+
+def post_to_instagram(image_path, caption):
+    """Main function to post an image to Instagram via Cloudinary."""
+    
+    # Get environment variables
     access_token = os.environ.get('INSTAGRAM_ACCESS_TOKEN')
     account_id = os.environ.get('INSTAGRAM_ACCOUNT_ID')
     
-    cloudinary_config = {
-        'cloud_name': os.environ.get('CLOUDINARY_CLOUD_NAME'),
-        'api_key': os.environ.get('CLOUDINARY_API_KEY'),
-        'api_secret': os.environ.get('CLOUDINARY_API_SECRET')
-    }
+    if not access_token or not account_id:
+        print("Error: Instagram credentials not found in environment variables")
+        return False
     
-    if not all([access_token, account_id, cloudinary_config['cloud_name']]):
-        print("⚠️ Missing credentials!")
-        return None
+    print("Uploading image to Cloudinary...")
+    image_url = upload_to_cloudinary(image_path)
     
-    poster = InstagramPoster(access_token, account_id, cloudinary_config)
-    post_id = poster.post_single_image(image_path, story)
+    if not image_url:
+        print("Failed to upload image to Cloudinary")
+        return False
     
-    return post_id
+    print(f"Image uploaded successfully: {image_url}")
+    
+    print("Creating Instagram media object...")
+    media_id = create_instagram_media(image_url, caption, access_token, account_id)
+    
+    if not media_id:
+        print("Failed to create Instagram media object")
+        return False
+    
+    print(f"Media object created: {media_id}")
+    
+    print("Publishing to Instagram...")
+    post_id = publish_instagram_media(media_id, access_token, account_id)
+    
+    if not post_id:
+        print("Failed to publish to Instagram")
+        return False
+    
+    print(f"Successfully posted to Instagram! Post ID: {post_id}")
+    return True
 
-
-# Example usage
+# Test function (optional)
 if __name__ == "__main__":
-    sample_story = {
-        "title": "Economic Confidence Hits New Low Among U.S. Dentists",
-        "summary": "The Q2 2025 report reveals declining confidence among dentists.",
-        "source": "ADA News",
-        "url": "https://example.com/story"
-    }
+    # This is just for testing the module independently
+    test_image = "test_image.png"
+    test_caption = "Test post from automation script"
     
-    post_id = post_story_to_instagram(sample_story, "test_image.png")
+    if os.path.exists(test_image):
+        success = post_to_instagram(test_image, test_caption)
+        if success:
+            print("Test post successful!")
+        else:
+            print("Test post failed!")
+    else:
+        print(f"Test image {test_image} not found")
