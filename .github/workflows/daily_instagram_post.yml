@@ -128,4 +128,23 @@ jobs:
         env:
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CL
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python automation.py
+      
+      - name: Commit updated tracking file
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posted_stories.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted stories tracking [skip ci]"
+          git push
+      
+      - name: Upload images as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instagram-images-${{ github.run_number }}
+          path: instagram_images/
+          retention-days: 7
