@@ -29,16 +29,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests Pillow cloudinary
       
-      - name: Fetch stories from API
+      - name: Create main automation script
         run: |
-          python << 'EOF'
-          import requests
+          cat > automation.py << 'SCRIPT_END'
+          import sys
           import json
-          
+          import time
+          import requests
+          from datetime import datetime
+          from instagram_image_generator import InstagramImageGenerator
+          from instagram_poster_cloudinary import post_story_to_instagram
+
+          print("=" * 60)
+          print("STEP 1: FETCHING STORIES FROM API")
+          print("=" * 60)
+
           # Fetch from your Dental Daily Brief API
           response = requests.get('https://dentaldailybrief.com/api/stories')
           data = response.json()
-          
+
           # Load already posted stories
           try:
               with open('posted_stories.json', 'r') as f:
@@ -46,105 +55,77 @@ jobs:
                   posted_urls = set(posted_data.get('posted_urls', []))
           except:
               posted_urls = set()
-          
+
           # Filter out already posted stories
           new_stories = []
           for story in data['stories']:
               if story['url'] not in posted_urls:
                   new_stories.append(story)
-          
-          # Save new stories to process
-          with open('new_stories.json', 'w') as f:
-              json.dump(new_stories, f)
-          
-          print(f"Found {len(new_stories)} new stories to post")
-          EOF
-      
-      - name: Generate images and post to Instagram
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-        run: |
-          python << 'EOF'
-          import json
-          import time
-          from instagram_image_generator import InstagramImageGenerator
-          from instagram_poster_cloudinary import post_story_to_instagram
-          
-          # Load new stories
-          with open('new_stories.json', 'r') as f:
-              new_stories = json.load(f)
-          
+
+          print(f"Total stories from API: {len(data['stories'])}")
+          print(f"Already posted: {len(posted_urls)}")
+          print(f"New stories to post: {len(new_stories)}")
+
           if not new_stories:
-              print("No new stories to post")
-              exit(0)
-          
+              print("\nNo new stories to post today!")
+              sys.exit(0)
+
+          print("\n" + "=" * 60)
+          print("STEP 2: GENERATING IMAGES AND POSTING")
+          print("=" * 60)
+
           # Load posted stories tracking
           try:
               with open('posted_stories.json', 'r') as f:
                   posted_data = json.load(f)
           except:
               posted_data = {'posted_urls': [], 'last_updated': ''}
-          
-          posted_urls = posted_data.get('posted_urls', [])
-          
+
+          posted_urls_list = posted_data.get('posted_urls', [])
+
           # Generate images and post each story
           generator = InstagramImageGenerator()
           successful_posts = 0
-          
-          for story in new_stories:
-              print(f"\n{'='*60}")
-              print(f"Processing: {story['title'][:50]}...")
-              print(f"{'='*60}")
+
+          for idx, story in enumerate(new_stories, 1):
+              print(f"\n[{idx}/{len(new_stories)}] Processing: {story['title'][:50]}...")
               
-              # Generate image
-              image_path = generator.generate_image(story)
-              
-              # Post to Instagram
-              post_id = post_story_to_instagram(story, image_path)
-              
-              if post_id:
-                  # Mark as posted
-                  posted_urls.append(story['url'])
-                  successful_posts += 1
-                  print(f"✅ Successfully posted story {successful_posts}")
-              else:
-                  print(f"❌ Failed to post story")
+              try:
+                  # Generate image
+                  image_path = generator.generate_image(story)
+                  
+                  # Post to Instagram
+                  post_id = post_story_to_instagram(story, image_path)
+                  
+                  if post_id:
+                      posted_urls_list.append(story['url'])
+                      successful_posts += 1
+                      print(f"✅ Successfully posted! ({successful_posts}/{len(new_stories)})")
+                  else:
+                      print(f"❌ Failed to post")
+              except Exception as e:
+                  print(f"❌ Error: {str(e)}")
               
               # Wait between posts (Instagram rate limiting)
-              if successful_posts < len(new_stories):
+              if idx < len(new_stories):
                   print("Waiting 30 seconds before next post...")
                   time.sleep(30)
-          
+
           # Update tracking file
-          from datetime import datetime
-          posted_data['posted_urls'] = posted_urls
+          posted_data['posted_urls'] = posted_urls_list
           posted_data['last_updated'] = datetime.now().isoformat()
-          
+
           with open('posted_stories.json', 'w') as f:
               json.dump(posted_data, f, indent=2)
-          
-          print(f"\n{'='*60}")
-          print(f"✅ AUTOMATION COMPLETE!")
-          print(f"{'='*60}")
-          print(f"Posted {successful_posts} out of {len(new_stories)} stories")
-          EOF
+
+          print("\n" + "=" * 60)
+          print("✅ AUTOMATION COMPLETE!")
+          print("=" * 60)
+          print(f"Successfully posted: {successful_posts}/{len(new_stories)}")
+          SCRIPT_END
       
-      - name: Commit updated tracking file
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add posted_stories.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted stories tracking"
-          git push
-      
-      - name: Upload images as artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: instagram-images-${{ github.run_number }}
-          path: instagram_images/
-          retention-days: 7
+      - name: Run automation
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CL
