@@ -2,6 +2,7 @@ import os
 import requests
 import cloudinary
 import cloudinary.uploader
+import time
 
 def upload_to_cloudinary(image_path):
     """Upload image to Cloudinary and return the URL."""
@@ -14,11 +15,13 @@ def upload_to_cloudinary(image_path):
     )
     
     try:
-        # Upload image to Cloudinary
+        # Upload image to Cloudinary with quality settings
         response = cloudinary.uploader.upload(
             image_path,
             folder="instagram_posts",
-            resource_type="image"
+            resource_type="image",
+            quality="auto:best",  # Ensure best quality
+            format="jpg"  # Instagram prefers JPG
         )
         
         # Return the secure URL
@@ -91,6 +94,10 @@ def post_to_instagram(image_path, caption):
     
     print(f"Image uploaded successfully: {image_url}")
     
+    # Wait for Cloudinary to fully process the image
+    print("Waiting for image processing...")
+    time.sleep(5)  # Give Cloudinary time to process
+    
     print("Creating Instagram media object...")
     media_id = create_instagram_media(image_url, caption, access_token, account_id)
     
@@ -100,12 +107,23 @@ def post_to_instagram(image_path, caption):
     
     print(f"Media object created: {media_id}")
     
+    # Wait for Instagram to process the media
+    print("Waiting for Instagram to process media...")
+    time.sleep(10)  # Give Instagram more time to process
+    
     print("Publishing to Instagram...")
     post_id = publish_instagram_media(media_id, access_token, account_id)
     
     if not post_id:
         print("Failed to publish to Instagram")
-        return False
+        # Try again after a longer wait
+        print("Retrying after additional wait...")
+        time.sleep(15)
+        post_id = publish_instagram_media(media_id, access_token, account_id)
+        
+        if not post_id:
+            print("Failed to publish after retry")
+            return False
     
     print(f"Successfully posted to Instagram! Post ID: {post_id}")
     return True
