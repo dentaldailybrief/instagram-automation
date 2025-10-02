@@ -85,6 +85,31 @@ def create_gradient_background(width, height):
     
     return image
 
+def draw_rounded_rectangle(draw, coords, radius=20, fill=None, outline=None, width=1):
+    """Draw a rounded rectangle (compatible with older Pillow versions)."""
+    x1, y1, x2, y2 = coords
+    
+    # Draw the main rectangle body (minus corners)
+    draw.rectangle([(x1 + radius, y1), (x2 - radius, y2)], fill=fill)
+    draw.rectangle([(x1, y1 + radius), (x2, y2 - radius)], fill=fill)
+    
+    # Draw corners
+    draw.ellipse([(x1, y1), (x1 + radius * 2, y1 + radius * 2)], fill=fill)
+    draw.ellipse([(x2 - radius * 2, y1), (x2, y1 + radius * 2)], fill=fill)
+    draw.ellipse([(x1, y2 - radius * 2), (x1 + radius * 2, y2)], fill=fill)
+    draw.ellipse([(x2 - radius * 2, y2 - radius * 2), (x2, y2)], fill=fill)
+    
+    if outline:
+        # Draw outline if specified
+        draw.arc([(x1, y1), (x1 + radius * 2, y1 + radius * 2)], 180, 270, fill=outline, width=width)
+        draw.arc([(x2 - radius * 2, y1), (x2, y1 + radius * 2)], 270, 0, fill=outline, width=width)
+        draw.arc([(x1, y2 - radius * 2), (x1 + radius * 2, y2)], 90, 180, fill=outline, width=width)
+        draw.arc([(x2 - radius * 2, y2 - radius * 2), (x2, y2)], 0, 90, fill=outline, width=width)
+        draw.line([(x1 + radius, y1), (x2 - radius, y1)], fill=outline, width=width)
+        draw.line([(x2, y1 + radius), (x2, y2 - radius)], fill=outline, width=width)
+        draw.line([(x2 - radius, y2), (x1 + radius, y2)], fill=outline, width=width)
+        draw.line([(x1, y2 - radius), (x1, y1 + radius)], fill=outline, width=width)
+
 def add_design_elements(draw, width, height):
     """Add subtle design elements to make the image more professional."""
     # Add subtle corner accents
@@ -159,15 +184,11 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
         draw.rectangle([(badge_x + 10, badge_y), (badge_x + badge_width - 10, badge_y + badge_height)], fill=badge_bg)
         
         # Draw "NEW" text
-        draw.text((badge_x + badge_width//2, badge_y + badge_height//2), "NEW", 
+        draw.text((badge_x + badge_width//2, badge_y + badge_height//2 + 5), "NEW", 
                  font=fonts['source'], fill=badge_text, anchor="mm")
     
     # Brand name at top
     brand_text = "DENTAL DAILY BRIEF"
-    draw_text_with_shadow(draw, (width//2, y_position), brand_text, 
-                         fonts['brand'], white, offset=3)
-    # Note: We're not using anchor="mm" to maintain compatibility
-    # Adjust position manually
     bbox = draw.textbbox((0, 0), brand_text, font=fonts['brand'])
     text_width = bbox[2] - bbox[0]
     draw_text_with_shadow(draw, ((width - text_width)//2, y_position), 
@@ -209,10 +230,10 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
     summary_lines = textwrap.wrap(summary, width=38, break_long_words=False)
     summary_height = len(summary_lines[:6]) * 40 + (summary_padding * 2)
     
-    # Draw summary background
-    draw.rounded_rectangle(
-        [(margin - 20, summary_y_start), 
-         (width - margin + 20, summary_y_start + summary_height)],
+    # Draw summary background using our custom function
+    draw_rounded_rectangle(draw, 
+        (margin - 20, summary_y_start, 
+         width - margin + 20, summary_y_start + summary_height),
         radius=20,
         fill=summary_bg_color
     )
@@ -258,9 +279,9 @@ def generate_instagram_image(story, output_path="instagram_post.png"):
     text_height = bbox[3] - bbox[1]
     
     cta_x = (width - text_width) // 2
-    draw.rounded_rectangle(
-        [(cta_x - cta_padding, y_position - 10), 
-         (cta_x + text_width + cta_padding, y_position + text_height + 10)],
+    draw_rounded_rectangle(draw,
+        (cta_x - cta_padding, y_position - 10, 
+         cta_x + text_width + cta_padding, y_position + text_height + 10),
         radius=25,
         fill=cta_bg
     )
